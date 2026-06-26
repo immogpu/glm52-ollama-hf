@@ -45,4 +45,4 @@ RUN chmod +x /usr/local/bin/start-glm52-hf /usr/local/bin/llama-gguf-split \
 
 EXPOSE 11434
 
-CMD ["/usr/local/bin/start-glm52-hf"]
+ENTRYPOINT ["/usr/local/bin/start-glm52-hf"]

@@ -64,6 +64,7 @@ EOF
 
 echo "Creating Ollama model ${GLM52_MODEL_NAME}..."
 ollama create "$GLM52_MODEL_NAME" -f "$MODELFILE"
+ollama prune -f >/dev/null 2>&1 || true
 
 if [ "${GLM52_KEEP_GGUF:-0}" != "1" ]; then
   rm -f "$MODEL_FILE"
