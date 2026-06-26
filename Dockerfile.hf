@@ -1,0 +1,48 @@
+FROM nvidia/cuda:12.6.3-devel-ubuntu24.04 AS llama-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+    build-essential \
+    cmake \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp \
+ && cmake -S llama.cpp -B llama.cpp/build \
+ && cmake --build llama.cpp/build --target llama-gguf-split -j"$(nproc)"
+
+FROM ollama/ollama:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV OLLAMA_HOST=0.0.0.0:11434
+ENV OLLAMA_MODELS=/workspace/.ollama
+ENV GLM52_MODEL_DIR=/workspace/models/glm-5.2
+ENV GLM52_MODEL_NAME=glm-5.2-1bit
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+ENV HF_XET_HIGH_PERFORMANCE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    python3 \
+    python3-pip \
+    curl \
+    libgomp1 \
+    zstd \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir -U "huggingface_hub[cli]" hf_transfer --break-system-packages
+
+COPY --from=llama-builder /tmp/llama.cpp/build/bin/llama-gguf-split /usr/local/bin/llama-gguf-split
+COPY --from=llama-builder /tmp/llama.cpp/build/bin/*.so* /usr/local/lib/
+COPY start-glm52-hf /usr/local/bin/start-glm52-hf
+
+RUN chmod +x /usr/local/bin/start-glm52-hf /usr/local/bin/llama-gguf-split \
+ && ldconfig
+
+EXPOSE 11434
+
+CMD ["/usr/local/bin/start-glm52-hf"]

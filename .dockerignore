@@ -1,0 +1,7 @@
+.git
+context.md
+*.log
+dbdata/
+__pycache__/
+*.py[cod]
+.venv/

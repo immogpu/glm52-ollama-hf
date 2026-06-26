@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+export OLLAMA_HOST="${OLLAMA_HOST:-0.0.0.0:11434}"
+export OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}"
+export GLM52_MODEL_DIR="${GLM52_MODEL_DIR:-/workspace/models/glm-5.2}"
+export GLM52_MODEL_NAME="${GLM52_MODEL_NAME:-glm-5.2-1bit}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+export HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}"
+
+MODEL_FILE="${GLM52_MODEL_DIR}/GLM-5.2-UD-IQ1_S.gguf"
+SHARD_FILE="${GLM52_MODEL_DIR}/UD-IQ1_S/GLM-5.2-UD-IQ1_S-00001-of-00006.gguf"
+MODELFILE="${GLM52_MODEL_DIR}/Modelfile"
+
+mkdir -p "$GLM52_MODEL_DIR" "$OLLAMA_MODELS"
+
+start_ollama() {
+  ollama serve &
+  OLLAMA_PID="$!"
+  trap 'kill "$OLLAMA_PID" >/dev/null 2>&1 || true' EXIT
+
+  for _ in $(seq 1 180); do
+    if ollama list >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Ollama did not become ready in time" >&2
+  return 1
+}
+
+start_ollama
+
+if ollama list | awk '{print $1}' | grep -Fxq "${GLM52_MODEL_NAME}:latest"; then
+  echo "Ready. Serving Ollama on ${OLLAMA_HOST}; model already exists: ${GLM52_MODEL_NAME}"
+  wait "$OLLAMA_PID"
+  exit $?
+fi
+
+if ! [ -s "$MODEL_FILE" ]; then
+  echo "Downloading GLM-5.2 UD-IQ1_S shards from Hugging Face..."
+  hf download unsloth/GLM-5.2-GGUF \
+    --include "UD-IQ1_S/*" \
+    --local-dir "$GLM52_MODEL_DIR"
+
+  echo "Merging GGUF shards..."
+  llama-gguf-split --merge "$SHARD_FILE" "$MODEL_FILE"
+
+  if [ "${GLM52_KEEP_SHARDS:-0}" != "1" ]; then
+    rm -rf "${GLM52_MODEL_DIR}/UD-IQ1_S"
+  fi
+fi
+
+cat > "$MODELFILE" <<EOF
+FROM ${MODEL_FILE}
+PARAMETER num_ctx 8192
+PARAMETER num_predict 16384
+PARAMETER temperature 1.0
+PARAMETER top_p 0.95
+PARAMETER min_p 0.01
+PARAMETER repeat_penalty 1.0
+EOF
+
+echo "Creating Ollama model ${GLM52_MODEL_NAME}..."
+ollama create "$GLM52_MODEL_NAME" -f "$MODELFILE"
+
+if [ "${GLM52_KEEP_GGUF:-0}" != "1" ]; then
+  rm -f "$MODEL_FILE"
+fi
+
+echo "Ready. Serving Ollama on ${OLLAMA_HOST}; model: ${GLM52_MODEL_NAME}"
+wait "$OLLAMA_PID"
