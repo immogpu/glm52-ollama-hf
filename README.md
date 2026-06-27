@@ -1,22 +1,41 @@
-# GLM-5.2 Ollama HF Runtime Image
+# GLM-5.2 Runtime Images
 
-Small RunPod image for serving `unsloth/GLM-5.2-GGUF` UD-IQ1_S with Ollama.
+Small RunPod images for serving `unsloth/GLM-5.2-GGUF` UD-IQ1_S.
 
-The image does not include the model. On first container start it downloads the GGUF shards from Hugging Face, merges them with `llama-gguf-split`, imports the model into Ollama as `glm-5.2-1bit`, and serves Ollama on port `11434`.
+The images do not include the model. They download model files from Hugging Face on first container start and reuse `/workspace` on later starts.
 
-Use a persistent RunPod volume mounted at `/workspace` so later starts reuse `/workspace/.ollama` and skip the download/import path.
+Use a persistent RunPod volume mounted at `/workspace`.
 
-## Image
+## Ollama Image
 
 ```text
 ghcr.io/immogpu/glm52-ollama-hf:latest
 ```
 
-## RunPod
+Downloads the ready Ollama store from `mstoken/glm52-ollama-store` and serves Ollama on port `11434`.
 
-- Container disk: `800 GB`
+## llama-server Image
+
+```text
+ghcr.io/immogpu/glm52-llama-hf:latest
+```
+
+Downloads the split GGUF shards from `unsloth/GLM-5.2-GGUF` and starts `llama-server` directly against shard `00001`. This skips GGUF merge and Ollama import.
+
+Default reasoning settings:
+
+```text
+GLM52_ENABLE_THINKING=true
+GLM52_REASONING_EFFORT=high
+```
+
+The server listens on port `11434` and exposes the llama.cpp server API, including OpenAI-compatible routes.
+
+## RunPod Defaults
+
+- Container disk: `300-350 GB`
 - Volume mount path: `/workspace`
 - Port: `11434/http`
 - Optional secret env: `HF_TOKEN`
 
-First run needs large temporary storage because shards, merged GGUF, and Ollama import data overlap.
+The llama-server image needs enough disk for the split shards only. The Ollama image needs enough disk for the ready Ollama store.

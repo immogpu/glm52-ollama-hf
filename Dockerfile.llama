@@ -1,0 +1,37 @@
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LLAMA_HOST=0.0.0.0
+ENV LLAMA_PORT=11434
+ENV GLM52_HF_REPO=unsloth/GLM-5.2-GGUF
+ENV GLM52_HF_INCLUDE=UD-IQ1_S/*
+ENV GLM52_MODEL_DIR=/workspace/models/glm-5.2
+ENV GLM52_MODEL_SHARD=UD-IQ1_S/GLM-5.2-UD-IQ1_S-00001-of-00006.gguf
+ENV GLM52_CTX_SIZE=8192
+ENV GLM52_TEMP=1.0
+ENV GLM52_TOP_P=0.95
+ENV GLM52_MIN_P=0.01
+ENV GLM52_N_PREDICT=16384
+ENV GLM52_REASONING_EFFORT=high
+ENV GLM52_ENABLE_THINKING=true
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+ENV HF_XET_HIGH_PERFORMANCE=1
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    python3 \
+    python3-pip \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir -U "huggingface_hub[cli,hf_xet]" hf_transfer --break-system-packages
+
+COPY start-glm52-llama /usr/local/bin/start-glm52-llama
+
+RUN chmod +x /usr/local/bin/start-glm52-llama
+
+EXPOSE 11434
+
+ENTRYPOINT ["/usr/local/bin/start-glm52-llama"]

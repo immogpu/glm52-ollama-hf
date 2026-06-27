@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+export LLAMA_HOST="${LLAMA_HOST:-0.0.0.0}"
+export LLAMA_PORT="${LLAMA_PORT:-11434}"
+export GLM52_HF_REPO="${GLM52_HF_REPO:-unsloth/GLM-5.2-GGUF}"
+export GLM52_HF_INCLUDE="${GLM52_HF_INCLUDE:-UD-IQ1_S/*}"
+export GLM52_MODEL_DIR="${GLM52_MODEL_DIR:-/workspace/models/glm-5.2}"
+export GLM52_MODEL_SHARD="${GLM52_MODEL_SHARD:-UD-IQ1_S/GLM-5.2-UD-IQ1_S-00001-of-00006.gguf}"
+export GLM52_CTX_SIZE="${GLM52_CTX_SIZE:-8192}"
+export GLM52_TEMP="${GLM52_TEMP:-1.0}"
+export GLM52_TOP_P="${GLM52_TOP_P:-0.95}"
+export GLM52_MIN_P="${GLM52_MIN_P:-0.01}"
+export GLM52_N_PREDICT="${GLM52_N_PREDICT:-16384}"
+export GLM52_REASONING_EFFORT="${GLM52_REASONING_EFFORT:-high}"
+export GLM52_ENABLE_THINKING="${GLM52_ENABLE_THINKING:-true}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+export HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-1}"
+
+MODEL_PATH="${GLM52_MODEL_DIR}/${GLM52_MODEL_SHARD}"
+
+mkdir -p "$GLM52_MODEL_DIR"
+
+if [[ ! -s "$MODEL_PATH" ]]; then
+  echo "Downloading GLM-5.2 GGUF shards from Hugging Face: ${GLM52_HF_REPO} (${GLM52_HF_INCLUDE})"
+  hf download "$GLM52_HF_REPO" \
+    --include "$GLM52_HF_INCLUDE" \
+    --local-dir "$GLM52_MODEL_DIR"
+fi
+
+if [[ ! -s "$MODEL_PATH" ]]; then
+  echo "Expected first shard is missing after download: ${MODEL_PATH}" >&2
+  find "$GLM52_MODEL_DIR" -maxdepth 4 -type f | sort >&2 || true
+  exit 1
+fi
+
+CHAT_TEMPLATE_KWARGS="{\"enable_thinking\":${GLM52_ENABLE_THINKING},\"reasoning_effort\":\"${GLM52_REASONING_EFFORT}\"}"
+
+echo "Starting llama-server on ${LLAMA_HOST}:${LLAMA_PORT}"
+echo "Model first shard: ${MODEL_PATH}"
+echo "Reasoning: enable_thinking=${GLM52_ENABLE_THINKING}, reasoning_effort=${GLM52_REASONING_EFFORT}"
+
+exec llama-server \
+  --model "$MODEL_PATH" \
+  --host "$LLAMA_HOST" \
+  --port "$LLAMA_PORT" \
+  --ctx-size "$GLM52_CTX_SIZE" \
+  --n-predict "$GLM52_N_PREDICT" \
+  --temp "$GLM52_TEMP" \
+  --top-p "$GLM52_TOP_P" \
+  --min-p "$GLM52_MIN_P" \
+  --flash-attn auto \
+  --chat-template-kwargs "$CHAT_TEMPLATE_KWARGS"
